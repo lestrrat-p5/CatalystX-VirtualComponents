@@ -58,7 +58,9 @@ override setup_components => sub {
         # if this comp is not in the same namespace as myapp ($class),
         # then check if we can create a virtual component
 
-        if ( $comp_namespace ne $class ) {
+        if ( $comp_namespace eq $class ) {
+            Class::MOP::load_class($comp_class);
+        } else {
             my $base = $comp_class;
             $comp_class =~ s/^$comp_namespace/$class/;
 
