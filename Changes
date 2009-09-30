@@ -1,5 +1,8 @@
 Changes
 =======
 
+0.00001 - Oct 01 2009
+    - Properly load the local class
+
 0.00001 - Sep 30 2009
     - Initial release

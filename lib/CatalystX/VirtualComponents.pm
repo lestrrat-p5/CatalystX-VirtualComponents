@@ -3,7 +3,7 @@ use Moose::Role;
 use namespace::clean -except => qw(meta);
 use Module::Pluggable::Object;
 
-our $VERSION = '0.00001';
+our $VERSION = '0.00002';
 
 sub search_components {
     my ($class, $namespace) = @_;
