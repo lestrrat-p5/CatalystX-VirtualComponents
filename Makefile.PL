@@ -3,6 +3,8 @@ use inc::Module::Install;
 name 'CatalystX-VirtualComponents';
 all_from 'lib/CatalystX/VirtualComponents.pm';
 
+requires 'namespace::clean';
+requires 'Catalyst::Runtime' => 5.80;
 requires 'Moose';
 requires 'Module::Pluggable::Object';
 
