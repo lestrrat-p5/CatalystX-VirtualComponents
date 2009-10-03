@@ -4,7 +4,7 @@ use namespace::clean -except => qw(meta);
 use Module::Pluggable::Object;
 use Devel::InheritNamespace;
 
-our $VERSION = '0.00002';
+our $VERSION = '0.00003';
 
 sub search_components {
     my ($class, $namespace, @namespaces) = @_;
