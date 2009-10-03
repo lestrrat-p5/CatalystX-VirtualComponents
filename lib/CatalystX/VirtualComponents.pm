@@ -2,95 +2,61 @@ package CatalystX::VirtualComponents;
 use Moose::Role;
 use namespace::clean -except => qw(meta);
 use Module::Pluggable::Object;
+use Devel::InheritNamespace;
 
 our $VERSION = '0.00002';
 
 sub search_components {
-    my ($class, $namespace) = @_;
+    my ($class, $namespace, @namespaces) = @_;
 
     my @paths   = qw( ::Controller ::C ::Model ::M ::View ::V );
     my $config  = $class->config->{ setup_components };
     my $extra   = delete $config->{ search_extra } || [];
 
-    my @search_path = map {
-        s/^(?=::)/$namespace/;
-        $_;
-    } @paths;
-    push @search_path, @$extra;
+    my $comps;
+    foreach my $ns (@namespaces) {
+        foreach my $path (@paths) {
+            my $local_namespace = $namespace . $path;;
+            my $inherit_namespace = $path;
+            $inherit_namespace =~ s/^(?=::)/$ns/;
+            my @search_path = ($inherit_namespace, @$extra);
 
-    my $locator = Module::Pluggable::Object->new(
-        search_path => [ @search_path ],
-        %$config
-    );
+            my $loaded_comps = 
+                Devel::InheritNamespace->new(
+                    search_options => $config
+                )->all_modules( $local_namespace, @search_path )
+            ;
+            while (my ($comp_class, $data) = each %$loaded_comps) {
+                if ($comp_class =~ /::SUPER$/) {
+                    next;
+                }
+                $comps->{$comp_class} = $data;
+            }
+        }
+    }
 
-    my @comps =
-        sort { length $a <=> length $b } 
-        grep { !/::SUPER$/ } $locator->plugins;
-
-    return @comps;
+    return $comps;
 }
 
 override setup_components => sub {
     my $class = shift;
-
-    my %virtual_components;
 
     my @hierarchy =
         grep { $_->isa('Catalyst') && $_ ne 'Catalyst' }
         $class->meta->linearized_isa
     ;
 
-    my @comps;
-    my %comps;
-    foreach my $superclass ( @hierarchy ) {
-        push @comps,
-            map {
-                $comps{ $_ }++;
-                [ $superclass, $_ ]
-            } 
-            $class->search_components( $superclass );
-    }
-    foreach my $comp (@comps) {
-        my ($comp_namespace, $comp_class) = @$comp;
+    my $comps = $class->search_components( @hierarchy );
 
-        next if $virtual_components{ $comp_class };
-
-        # if this comp is not in the same namespace as myapp ($class),
-        # then check if we can create a virtual component
-
-        if ( $comp_namespace eq $class ) {
-            Class::MOP::load_class($comp_class);
-        } else {
-            my $base = $comp_class;
-            $comp_class =~ s/^$comp_namespace/$class/;
-
-            if ($class->components->{$comp_class}) {
-                next;
-            }
-
-            eval { Class::MOP::load_class($comp_class) };
-            if (my $e = $@) {
-                if ($e =~ /Can't locate/) {
-                    # if the module is NOT found in the current app ($class),
-                    # then we build a virtual component
-                    my $meta = Moose::Meta::Class->create(
-                        $comp_class => ( superclasses => [ $base ] )
-                    );
-                    $virtual_components{ $comp_class }++;
-                } else {
-                    confess "Failed to load class $comp_class: $e";
-                }
-            }
-        }
-
+    foreach my $comp_class (keys %$comps) {
         my $module = $class->setup_component($comp_class);
         my %modules = (
             $comp_class => $module,
             map {
                 $_ => $class->setup_component($_)
             } grep {
-                not exists $comps{$_}
-            } Devel::InnerPackage::list_packages( $comp )
+                not exists $comps->{$_}
+            } Devel::InnerPackage::list_packages( $comp_class )
         );
         for my $key ( keys %modules ) {
             $class->components->{ $key } = $modules{ $key };
@@ -100,7 +66,10 @@ override setup_components => sub {
     if ($class->debug) {
         my $column_width = Catalyst::Utils::term_width() - 6;
         my $t = Text::SimpleTable->new($column_width);
-        $t->row($_) for sort keys %virtual_components;
+
+        my @virtual_components = grep { $comps->{$_}->{is_virtual} } keys %$comps;
+
+        $t->row($_) for sort @virtual_components;
         $class->log->debug( "Dynamically generated components:\n" . $t->draw . "\n" );
     }
 
